@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Space Dodger</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            overflow: hidden;
+            touch-action: none;
+        }
+        #gameContainer {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        canvas {
+            border: 2px solid #4a9eff;
+            border-radius: 8px;
+            background: #000;
+        }
+        #ui {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: none;
+        }
+        #ui.active { pointer-events: all; }
+        .screen {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            background: rgba(0,0,0,0.85);
+            padding: 30px 40px;
+            border-radius: 16px;
+            border: 2px solid #4a9eff;
+            color: #fff;
+            text-align: center;
+            min-width: 260px;
+        }
+        .screen.visible { display: flex; }
+        h1 { font-size: 28px; margin-bottom: 8px; color: #4a9eff; }
+        h2 { font-size: 20px; margin-bottom: 12px; color: #4a9eff; }
+        .score-display { font-size: 48px; color: #ffcc00; margin: 10px 0; }
+        .label { font-size: 14px; color: #aaa; margin-bottom: 4px; }
+        button {
+            margin: 8px 0;
+            padding: 12px 32px;
+            font-size: 18px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            background: #4a9eff;
+            color: #fff;
+            font-weight: bold;
+            transition: transform 0.1s, background 0.2s;
+            min-width: 180px;
+        }
+        button:hover { background: #3a8eef; }
+        button:active { transform: scale(0.95); }
+        button.secondary { background: #333; }
+        button.secondary:hover { background: #444; }
+        input {
+            padding: 10px;
+            font-size: 16px;
+            border: 2px solid #4a9eff;
+            border-radius: 8px;
+            background: #111;
+            color: #fff;
+            text-align: center;
+            margin: 8px 0;
+            width: 200px;
+            outline: none;
+        }
+        .error-msg { color: #ff4444; font-size: 13px; margin-top: 4px; min-height: 18px; }
+        .logged-in-hint { color: #4a9eff; font-size: 14px; margin: 4px 0; }
+        .btn-small { padding: 8px 20px; font-size: 14px; min-width: 140px; }
+        #hud {
+            position: absolute;
+            top: 10px; left: 10px; right: 10px;
+            display: none;
+            justify-content: space-between;
+            color: #fff;
+            font-size: 16px;
+            font-weight: bold;
+            text-shadow: 1px 1px 3px #000;
+        }
+        #hud.visible { display: flex; }
+        .leaderboard-list {
+            list-style: none;
+            width: 100%;
+            margin: 10px 0;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .leaderboard-list li {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 12px;
+            margin: 3px 0;
+            background: rgba(74,158,255,0.1);
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .leaderboard-list li:nth-child(1) { color: #ffd700; }
+        .leaderboard-list li:nth-child(2) { color: #c0c0c0; }
+        .leaderboard-list li:nth-child(3) { color: #cd7f32; }
+        .controls-hint {
+            font-size: 12px;
+            color: #888;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="game"></canvas>
+        <div id="hud">
+            <span id="hudScore">Счёт: 0</span>
+            <span id="hudBest">Рекорд: 0</span>
+        </div>
+        <div id="ui" class="active">
+            <div id="authScreen" class="screen visible">
+                <h1>Space Dodger</h1>
+                <p style="color:#aaa;margin:8px 0">Уклоняйся от астероидов!</p>
+                <div id="loginForm">
+                    <input type="text" id="loginName" placeholder="Ник" maxlength="12">
+                    <input type="password" id="loginPass" placeholder="Пароль">
+                    <div class="error-msg" id="loginError"></div>
+                    <button onclick="doLogin()">Войти</button>
+                    <p style="color:#888;font-size:13px;margin:4px 0">Нет аккаунта?</p>
+                    <button class="secondary btn-small" onclick="showRegister()">Регистрация</button>
+                </div>
+                <div id="registerForm" style="display:none">
+                    <input type="text" id="regName" placeholder="Ник" maxlength="12">
+                    <input type="password" id="regPass" placeholder="Пароль">
+                    <input type="password" id="regPass2" placeholder="Повтори пароль">
+                    <div class="error-msg" id="regError"></div>
+                    <button onclick="doRegister()">Создать</button>
+                    <button class="secondary btn-small" onclick="showLogin()">Назад</button>
+                </div>
+            </div>
+            <div id="menuScreen" class="screen">
+                <h1>Space Dodger</h1>
+                <div class="logged-in-hint">Игрок: <span id="currentUser"></span></div>
+                <div class="controls-hint">
+                    ПК: &larr; &rarr; или A/D<br>
+                    Телефон: свайп / касание
+                </div>
+                <button onclick="startGame()">Играть</button>
+                <button class="secondary" onclick="showLeaderboard()">Лидерборд</button>
+                <button class="secondary btn-small" onclick="doLogout()">Выйти</button>
+            </div>
+            <div id="gameOverScreen" class="screen">
+                <h2>Игра окончена!</h2>
+                <div class="label">Счёт</div>
+                <div class="score-display" id="finalScore">0</div>
+                <div class="label">Лучший</div>
+                <div style="font-size:24px;color:#4a9eff" id="bestScore">0</div>
+                <button onclick="startGame()">Заново</button>
+                <button class="secondary" onclick="showMenu()">Меню</button>
+            </div>
+            <div id="leaderboardScreen" class="screen">
+                <h2>Лидерборд</h2>
+                <ol class="leaderboard-list" id="leaderboardList"></ol>
+                <button class="secondary" onclick="showMenu()">Назад</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        const ui = document.getElementById('ui');
+        const hud = document.getElementById('hud');
+        const hudScore = document.getElementById('hudScore');
+        const hudBest = document.getElementById('hudBest');
+
+        let W, H;
+        function resize() {
+            const maxW = Math.min(window.innerWidth - 20, 400);
+            const maxH = Math.min(window.innerHeight - 20, 700);
+            W = canvas.width = maxW;
+            H = canvas.height = maxH;
+        }
+        resize();
+        window.addEventListener('resize', resize);
+
+        let player, asteroids, stars, score, bestScore, gameRunning, speed, spawnTimer, difficulty;
+        let currentUser = '';
+        bestScore = 0;
+
+        function api(path, opts = {}) {
+            return fetch(path, {
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                ...opts
+            }).then(r => r.json().then(d => ({ ok: r.ok, data: d, status: r.status })));
+        }
+
+        async function checkAuth() {
+            const res = await api('/api/me');
+            if (res.ok && res.data.user) {
+                currentUser = res.data.user;
+                bestScore = res.data.score || 0;
+                showMenu();
+            } else {
+                showLogin();
+            }
+        }
+
+        function showScreen(id) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('visible'));
+            document.getElementById(id).classList.add('visible');
+            ui.classList.add('active');
+            hud.classList.remove('visible');
+        }
+
+        function showLogin() {
+            document.getElementById('loginForm').style.display = '';
+            document.getElementById('registerForm').style.display = 'none';
+            document.getElementById('loginError').textContent = '';
+            showScreen('authScreen');
+        }
+
+        function showRegister() {
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('registerForm').style.display = '';
+            document.getElementById('regError').textContent = '';
+            showScreen('authScreen');
+        }
+
+        async function doRegister() {
+            const name = document.getElementById('regName').value.trim();
+            const pass = document.getElementById('regPass').value;
+            const pass2 = document.getElementById('regPass2').value;
+            const err = document.getElementById('regError');
+            if (!name) { err.textContent = 'Введите ник'; return; }
+            if (name.length < 2) { err.textContent = 'Минимум 2 символа'; return; }
+            if (!pass) { err.textContent = 'Введите пароль'; return; }
+            if (pass.length < 3) { err.textContent = 'Минимум 3 символа'; return; }
+            if (pass !== pass2) { err.textContent = 'Пароли не совпадают'; return; }
+            const res = await api('/api/register', {
+                method: 'POST',
+                body: JSON.stringify({ username: name, password: pass })
+            });
+            if (!res.ok) { err.textContent = res.data.error; return; }
+            currentUser = res.data.username;
+            bestScore = 0;
+            showMenu();
+        }
+
+        async function doLogin() {
+            const name = document.getElementById('loginName').value.trim();
+            const pass = document.getElementById('loginPass').value;
+            const err = document.getElementById('loginError');
+            if (!name || !pass) { err.textContent = 'Заполни все поля'; return; }
+            const res = await api('/api/login', {
+                method: 'POST',
+                body: JSON.stringify({ username: name, password: pass })
+            });
+            if (!res.ok) { err.textContent = res.data.error; return; }
+            currentUser = res.data.username;
+            const me = await api('/api/me');
+            bestScore = (me.ok && me.data.score) || 0;
+            showMenu();
+        }
+
+        async function doLogout() {
+            await api('/api/logout', { method: 'POST' });
+            currentUser = '';
+            bestScore = 0;
+            showLogin();
+        }
+
+        function showMenu() {
+            document.getElementById('currentUser').textContent = currentUser;
+            hudBest.textContent = 'Рекорд: ' + bestScore;
+            showScreen('menuScreen');
+        }
+
+        async function showLeaderboard() {
+            const res = await api('/api/leaderboard');
+            const lb = res.ok ? res.data : [];
+            const list = document.getElementById('leaderboardList');
+            list.innerHTML = '';
+            if (lb.length === 0) {
+                list.innerHTML = '<li style="justify-content:center;color:#666">Пока пусто</li>';
+            } else {
+                lb.slice(0, 10).forEach((e, i) => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `<span>${i+1}. ${e.name}</span><span>${e.score}</span>`;
+                    list.appendChild(li);
+                });
+            }
+            showScreen('leaderboardScreen');
+        }
+
+        function initGame() {
+            player = { x: W/2, y: H - 60, w: 32, h: 32, vx: 0 };
+            asteroids = [];
+            stars = [];
+            for (let i = 0; i < 80; i++) {
+                stars.push({
+                    x: Math.random() * W,
+                    y: Math.random() * H,
+                    s: Math.random() * 2 + 0.5,
+                    sp: Math.random() * 1.5 + 0.5
+                });
+            }
+            score = 0;
+            speed = 3;
+            spawnTimer = 0;
+            difficulty = 1;
+            gameRunning = true;
+        }
+
+        function startGame() {
+            resize();
+            initGame();
+            ui.classList.remove('active');
+            ui.querySelectorAll('.screen').forEach(s => s.classList.remove('visible'));
+            hud.classList.add('visible');
+            hudBest.textContent = 'Рекорд: ' + bestScore;
+            requestAnimationFrame(loop);
+        }
+
+        async function saveScore() {
+            const newScore = Math.floor(score);
+            const res = await api('/api/score', {
+                method: 'POST',
+                body: JSON.stringify({ score: newScore })
+            });
+            if (res.ok && newScore > bestScore) {
+                bestScore = newScore;
+            }
+        }
+
+        const keys = {};
+        let touchX = null;
+        let useTouch = false;
+
+        document.addEventListener('keydown', e => {
+            keys[e.key] = true;
+            if (['ArrowLeft','ArrowRight','a','d'].includes(e.key)) e.preventDefault();
+        });
+        document.addEventListener('keyup', e => keys[e.key] = false);
+
+        canvas.addEventListener('touchstart', e => {
+            e.preventDefault();
+            useTouch = true;
+            touchX = e.touches[0].clientX;
+        }, { passive: false });
+        canvas.addEventListener('touchmove', e => {
+            e.preventDefault();
+            touchX = e.touches[0].clientX;
+        }, { passive: false });
+        canvas.addEventListener('touchend', () => { touchX = null; });
+
+        canvas.addEventListener('mousedown', e => {
+            if (!gameRunning) return;
+            useTouch = true;
+            const rect = canvas.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            if (clickX < player.x) player.vx = -5;
+            else player.vx = 5;
+        });
+
+        function updatePlayer() {
+            if (useTouch && touchX !== null) {
+                const rect = canvas.getBoundingClientRect();
+                const tx = touchX - rect.left;
+                const dx = tx - player.x;
+                if (Math.abs(dx) > 3) player.vx = Math.sign(dx) * Math.min(Math.abs(dx) * 0.15, 7);
+                else player.vx *= 0.8;
+            } else {
+                let ax = 0;
+                if (keys['ArrowLeft'] || keys['a'] || keys['A']) ax = -1;
+                if (keys['ArrowRight'] || keys['d'] || keys['D']) ax = 1;
+                player.vx = ax * 6 || player.vx * 0.85;
+            }
+            player.x += player.vx;
+            player.x = Math.max(player.w/2, Math.min(W - player.w/2, player.x));
+        }
+
+        function spawnAsteroid() {
+            const size = 16 + Math.random() * 24;
+            asteroids.push({
+                x: Math.random() * (W - size * 2) + size,
+                y: -size,
+                r: size,
+                speed: speed + Math.random() * 2,
+                rot: Math.random() * Math.PI * 2,
+                rotV: (Math.random() - 0.5) * 0.1,
+                color: `hsl(${Math.random()*40+10}, 70%, 50%)`
+            });
+        }
+
+        function loop() {
+            if (!gameRunning) return;
+
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, W, H);
+            stars.forEach(s => {
+                s.y += s.sp;
+                if (s.y > H) { s.y = 0; s.x = Math.random() * W; }
+                ctx.fillStyle = `rgba(255,255,255,${0.3 + s.s * 0.3})`;
+                ctx.fillRect(s.x, s.y, s.s, s.s);
+            });
+
+            spawnTimer++;
+            if (spawnTimer > Math.max(15, 50 - difficulty * 3)) {
+                spawnAsteroid();
+                if (Math.random() < 0.3 + difficulty * 0.05) spawnAsteroid();
+                spawnTimer = 0;
+            }
+
+            updatePlayer();
+            difficulty = 1 + score * 0.01;
+            speed = 3 + score * 0.02;
+
+            let hit = false;
+            asteroids.forEach(a => {
+                a.y += a.speed;
+                a.rot += a.rotV;
+                const dx = a.x - player.x;
+                const dy = a.y - player.y;
+                if (Math.sqrt(dx*dx + dy*dy) < a.r + player.w * 0.35) hit = true;
+            });
+            asteroids = asteroids.filter(a => a.y < H + a.r * 2);
+
+            score += 0.1;
+            hudScore.textContent = 'Счёт: ' + Math.floor(score);
+
+            ctx.save();
+            ctx.translate(player.x, player.y);
+            ctx.fillStyle = '#4a9eff';
+            ctx.beginPath();
+            ctx.moveTo(0, -16);
+            ctx.lineTo(-14, 14);
+            ctx.lineTo(14, 14);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = '#ffcc00';
+            ctx.beginPath();
+            ctx.moveTo(0, 18);
+            ctx.lineTo(-5, 26);
+            ctx.lineTo(5, 26);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+
+            asteroids.forEach(a => {
+                ctx.save();
+                ctx.translate(a.x, a.y);
+                ctx.rotate(a.rot);
+                ctx.fillStyle = a.color;
+                ctx.beginPath();
+                for (let i = 0; i < 7; i++) {
+                    const ang = (Math.PI * 2 / 7) * i;
+                    const rad = a.r * (0.8 + Math.sin(i * 2.3) * 0.2);
+                    if (i === 0) ctx.moveTo(Math.cos(ang) * rad, Math.sin(ang) * rad);
+                    else ctx.lineTo(Math.cos(ang) * rad, Math.sin(ang) * rad);
+                }
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            });
+
+            if (hit) {
+                gameRunning = false;
+                saveScore();
+                document.getElementById('finalScore').textContent = Math.floor(score);
+                document.getElementById('bestScore').textContent = bestScore;
+                showScreen('gameOverScreen');
+                return;
+            }
+
+            requestAnimationFrame(loop);
+        }
+
+        // Background stars for menu
+        function drawBg() {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, W, H);
+            for (let i = 0; i < 60; i++) {
+                ctx.fillStyle = `rgba(255,255,255,${0.2 + Math.random() * 0.5})`;
+                ctx.fillRect(Math.random() * W, Math.random() * H, Math.random() * 2 + 0.5, Math.random() * 2 + 0.5);
+            }
+        }
+        drawBg();
+        checkAuth();
+    </script>
+</body>
+</html>
